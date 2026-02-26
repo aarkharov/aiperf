@@ -159,6 +159,7 @@ class RecordProcessor(PullClientMixin, BaseComponentService):
         metadata = self._create_metric_record_metadata(
             message.record, message.service_id
         )
+        metadata.token_counts = parsed_record.token_counts
         raw_results = await self._process_record(parsed_record, metadata)
         results = []
         for result in raw_results:
