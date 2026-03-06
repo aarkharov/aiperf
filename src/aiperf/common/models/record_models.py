@@ -24,6 +24,7 @@ from aiperf.common.models.base_models import AIPerfBaseModel
 from aiperf.common.models.dataset_models import Turn
 from aiperf.common.models.error_models import ErrorDetails, ErrorDetailsCount
 from aiperf.common.models.export_models import JsonMetricResult
+from aiperf.common.models.modality_token_counts import ModalityTokenCounts
 from aiperf.common.models.model_endpoint_info import ModelEndpointInfo
 from aiperf.common.models.trace_models import BaseTraceData, TraceDataExport
 from aiperf.common.models.usage_models import Usage
@@ -615,6 +616,11 @@ class RequestRecord(AIPerfBaseModel):
         description="Deep copy of the request turns. This is a copy of the turns from request_info, "
         "made to avoid mutating the original session data when stripping multimodal content.",
     )
+    input_modalities_local: ModalityTokenCounts | None = Field(
+        default=None,
+        description="Per-modality input token estimates, copied from Turn data. "
+        "Pre-computed during dataset configuration via AutoProcessor.",
+    )
 
     @field_validator("trace_data", mode="before")
     @classmethod
@@ -889,19 +895,45 @@ class ParsedResponse(AIPerfBaseModel):
 
 
 class TokenCounts(AIPerfBaseModel):
-    """Token counts for a record."""
+    """Token counts for a record.
+
+    Totals (``input``, ``output``, ``reasoning``) are server-preferred with
+    local fallback (PR #716 pattern). Per-modality breakdown is always locally
+    estimated via AutoProcessor.
+
+    Two layers for input modalities:
+    - ``input_modalities_local``: raw local estimates from AutoProcessor
+    - ``input_modalities``: scaled proportionally to the server total
+
+    The invariant ``input_modalities.total == input`` holds when both
+    ``input_modalities`` and ``input`` are non-None.
+    """
 
     input: int | None = Field(
         default=None,
-        description="The server-reported prompt token count from the API usage field. If None, the server did not report prompt tokens.",
+        description="The total number of input tokens across all modalities. "
+        "Server-reported (usage.prompt_tokens) when available, otherwise client-side. "
+        "If None, the number of tokens could not be calculated.",
     )
     input_local: int | None = Field(
         default=None,
-        description="The number of input tokens computed by the client-side tokenizer. If None, the number of tokens could not be calculated.",
+        description="The number of input tokens computed by the client-side tokenizer. "
+        "If None, the number of tokens could not be calculated.",
+    )
+    input_modalities_local: "ModalityTokenCounts | None" = Field(
+        default=None,
+        description="Per-modality input token estimates from AutoProcessor (raw, unscaled). "
+        "Pre-computed during dataset configuration.",
+    )
+    input_modalities: "ModalityTokenCounts | None" = Field(
+        default=None,
+        description="Per-modality input token counts scaled to the server-reported total. "
+        "Computed in InferenceResultParser by scaling input_modalities_local ratios.",
     )
     output: int | None = Field(
         default=None,
-        description="The server-reported output token count (completion minus reasoning). If None, the server did not report completion tokens.",
+        description="The server-reported output token count (completion minus reasoning). "
+        "If None, the server did not report completion tokens.",
     )
     output_local: int | None = Field(
         default=None,
@@ -909,7 +941,8 @@ class TokenCounts(AIPerfBaseModel):
     )
     reasoning: int | None = Field(
         default=None,
-        description="The server-reported reasoning token count. If None, the server did not report reasoning tokens.",
+        description="The server-reported reasoning token count. "
+        "If None, the server did not report reasoning tokens.",
     )
     reasoning_local: int | None = Field(
         default=None,
