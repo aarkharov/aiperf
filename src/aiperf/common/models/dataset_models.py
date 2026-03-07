@@ -66,6 +66,23 @@ class MemoryMapClientMetadata(DatasetClientMetadata):
         default=0,
         description="Total size of the compressed data file in bytes.",
     )
+    # Payload mmap paths (optional, only present when raw_payload data exists)
+    payload_data_file_path: Path | None = Field(
+        default=None,
+        description="Path to payload data file containing pre-encoded JSON bytes.",
+    )
+    payload_index_file_path: Path | None = Field(
+        default=None,
+        description="Path to payload index file for O(1) payload lookups.",
+    )
+    compressed_payload_data_file_path: Path | None = Field(
+        default=None,
+        description="Path to zstd-compressed payload data file (K8s only).",
+    )
+    compressed_payload_index_file_path: Path | None = Field(
+        default=None,
+        description="Path to zstd-compressed payload index file (K8s only).",
+    )
 
 
 class Media(AIPerfBaseModel):
@@ -158,6 +175,12 @@ class Turn(AIPerfBaseModel):
     videos: list[Video] = Field(
         default=[], description="Collection of video data in each turn."
     )
+    raw_payload: dict[str, Any] | None = Field(
+        default=None,
+        description="Complete pre-built API request payload for verbatim replay. "
+        "When set, bypasses all endpoint payload construction (format_payload) "
+        "and sends this dict directly to the transport.",
+    )
 
     def metadata(self) -> TurnMetadata:
         """Get the metadata of the turn."""
@@ -209,6 +232,7 @@ class Turn(AIPerfBaseModel):
                 )
                 for vid in self.videos
             ],
+            raw_payload=None,
         )
 
 
